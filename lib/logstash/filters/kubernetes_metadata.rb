@@ -141,7 +141,7 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
     unless apiResponse = lookup_cache[url]
       begin
         begin
-          response = RestClient.get(url)
+          response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false)
           apiResponse = response.body
           lookup_cache[url] = apiResponse
         rescue RestClient::ResourceNotFound
