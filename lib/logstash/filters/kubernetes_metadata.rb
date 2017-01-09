@@ -161,17 +161,20 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
           'annotations' => sanatize_keys(data['metadata']['annotations']),
           'labels' => sanatize_keys(data['metadata']['labels'])
         }
+
+        begin
+          data = LogStash::Json.load(apiResponse)
+          {
+            'annotations' => sanatize_keys(data['metadata']['annotations']),
+            'labels' => sanatize_keys(data['metadata']['labels'])
+          }
+        rescue => e
+          @logger.warn("Unkown error while trying to load json response")
+        end
       rescue => e
         @logger.warn("Unknown error while getting Kubernetes metadata: #{e}")
       end
     end
-
-    data = LogStash::Json.load(apiResponse)
-    {
-      'annotations' => sanatize_keys(data['metadata']['annotations']),
-      'labels' => sanatize_keys(data['metadata']['labels'])
-    }
-
   end
 
 end
