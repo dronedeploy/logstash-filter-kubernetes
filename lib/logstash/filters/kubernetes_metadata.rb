@@ -155,13 +155,6 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
 
         return nil unless response.code == 200
 
-        data = LogStash::Json.load(apiResponse)
-
-        {
-          'annotations' => sanatize_keys(data['metadata']['annotations']),
-          'labels' => sanatize_keys(data['metadata']['labels'])
-        }
-
         begin
           data = LogStash::Json.load(apiResponse)
           {
