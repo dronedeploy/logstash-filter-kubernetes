@@ -21,6 +21,10 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
   # Kubernetes API
   config :api, :validate => :string, :default => "http://127.0.0.1:8001"
 
+  # Auth token
+  # should default to /var/run/secrets/kubernetes.io/serviceaccount, but didn't want to deal with that right now
+  config :auth_token, :validate => :string
+
   # default log format
   config :default_log_format, :validate => :string, :default => "default"
 
@@ -141,7 +145,11 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
     unless apiResponse = lookup_cache[url]
       begin
         begin
-          response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false)
+          if @auth_token.nil?
+            response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false)
+          else
+            response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false, headers: {:Authorization => "Bearer #{@auth_token}"})
+          end
           apiResponse = response.body
           lookup_cache[url] = apiResponse
         rescue RestClient::ResourceNotFound
@@ -156,14 +164,13 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
         return nil unless response.code == 200
 
         begin
-          data = LogStash::Json.load(apiResponse)
-          {
-            'annotations' => sanatize_keys(data['metadata']['annotations']),
-            'labels' => sanatize_keys(data['metadata']['labels'])
-          }
+          parsed = LogStash::Json.load(apiResponse)
+          data = {}
+          data['labels'] = sanatize_keys(parsed['metadata']['labels'])
+          data['annotations'] = sanatize_keys(parsed['metadata']['annotations'])
           return data
         rescue => e
-          @logger.warn("Unkown error while trying to load json response")
+          @logger.warn("Unkown error while trying to load json response: #{e}")
         end
       rescue => e
         @logger.warn("Unknown error while getting Kubernetes metadata: #{e}")

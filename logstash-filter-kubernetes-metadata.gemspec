@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'logstash-filter-kubernetes-metadata'
-  s.version = '0.1.4'
+  s.version = '0.1.6'
   s.licenses = ['Apache License (2.0)']
   s.require_paths = ["lib"]
   s.files = Dir['lib/**/*', 'spec/**/*', '*.gemspec', 'Gemfile']

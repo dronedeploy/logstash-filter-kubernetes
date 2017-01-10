@@ -16,4 +16,6 @@ package:
 test:
 	docker run -it --rm \
 		-e "KUBE_API=http://$(shell minikube ip):8080" \
-		-v $(CURDIR):/src logstash:2.3.4 /src/test/docker-entrypoint.sh
+		-v $(CURDIR):/src \
+		logstash:2.3.4 \
+		/src/test/docker-entrypoint.sh
