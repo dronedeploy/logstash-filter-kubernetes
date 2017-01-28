@@ -4,6 +4,7 @@ GEM_NAME := "logstash-filter-kubernetes-metadata"
 
 clean:
 	-minikube delete
+	-rm -f *.gem
 
 init: clean 
 	minikube start --extra-config apiserver.InsecureBindAddress=0.0.0.0
