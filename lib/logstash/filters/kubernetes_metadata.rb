@@ -48,30 +48,36 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
     config = {}
 
     @logger.debug("path is: " + path.to_s)
-    @logger.debug("config is: " + config.to_s)
     @logger.debug("lookup_cache is: " + lookup_cache[path].to_s)
 
     if lookup_cache[path]
-      @logger.debug("metadata cache hit")
+      @logger.debug("cache hit")
       metadata = lookup_cache[path]
     else
-      @logger.info("metadata cache miss")
-      kubernetes = get_file_info(path)
+      @logger.info("cache miss")
 
-      return unless kubernetes
+      metadata = get_file_info(path)
+      return unless metadata
 
-      pod = kubernetes['pod']
-      namespace = kubernetes['namespace']
-      name = kubernetes['container_name']
+      pod = metadata['pod']
+      namespace = metadata['namespace']
+      container = metadata['container']
+      return unless pod and namespace and container
 
-      return unless pod and namespace and name
-
-      metadata = kubernetes
+      @logger.info("pod: " + pod)
+      @logger.info("container: " + container)
 
       if data = get_kubernetes(namespace, pod)
-        metadata.merge!(data)
-        set_log_formats(metadata)
-        lookup_cache[path] = metadata
+        begin
+          metadata.merge!(data)
+          set_log_formats(metadata)
+
+          lookup_cache[path] = metadata
+        rescue TypeError => e
+          @logger.info("TypeError when caching metadata: #{data} #{e}")
+        rescue => e
+          @logger.info("Unexpected error when caching metadata: #{e}")
+        end
       end
     end
 
@@ -87,7 +93,7 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
         'stdout' => @default_log_format
       }
       a = metadata['annotations']
-      n = metadata['container_name']
+      n = metadata['container']
 
       # check for log-format-<stream>-<name>, log-format-<name>, log-format-<stream>, log-format
       # in annotations
@@ -103,7 +109,6 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
       metadata['log_format_stderr'] = format['stderr']
       metadata['log_format_stdout'] = format['stdout']
       @logger.debug("kubernetes metadata => #{metadata}")
-
     rescue => e
       @logger.info("Error setting log format: #{e}")
     end
@@ -119,7 +124,7 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
     kubernetes['replication_controller'] = parts[0].gsub(/-[0-9a-z]*$/, '')
     kubernetes['pod'] = parts[0]
     kubernetes['namespace'] = parts[1]
-    kubernetes['container_name'] = parts[2].gsub(/-[0-9a-z]*$/, '')
+    kubernetes['container'] = parts[2].gsub(/-[0-9a-z]*$/, '')
     kubernetes['container_id'] = parts[2].split('-').last
     return kubernetes
   end
@@ -138,31 +143,26 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
   end
 
   def get_kubernetes(namespace, pod)
-    
-
     url = [ @api, 'api/v1/namespaces', namespace, 'pods', pod ].join("/")
 
-    unless apiResponse = lookup_cache[url]
+    begin
       begin
-        begin
-          if @auth_token.nil?
-            response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false)
-          else
-            response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false, headers: {:Authorization => "Bearer #{@auth_token}"})
-          end
-          apiResponse = response.body
-          lookup_cache[url] = apiResponse
-        rescue RestClient::ResourceNotFound
-          @logger.info("Kubernetes returned an error while querying the API")
-          return nil
+        if @auth_token.nil?
+          response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false)
+        else
+          response = RestClient::Request.execute(:url => url, :method => :get, :verify_ssl => false, headers: {:Authorization => "Bearer #{@auth_token}"})
         end
+        apiResponse = response.body
+        @logger.info("successfully queried the kubernetes api")
+      rescue RestClient::ResourceNotFound
+        @logger.info("Kubernetes returned an error while querying the API")
+        return nil
+      end
 
-        if response.code != 200
-          @logger.info("Non 200 response code returned: #{response.code}")
-        end
-
-        return nil unless response.code == 200
-
+      if response.code != 200
+        @logger.info("Non 200 response code returned: #{response.code}")
+        return nil
+      else
         begin
           parsed = LogStash::Json.load(apiResponse)
           data = {}
@@ -171,10 +171,13 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
           return data
         rescue => e
           @logger.info("Unkown error while trying to load json response: #{e}")
+          return nil
         end
-      rescue => e
-        @logger.info("Unknown error while getting Kubernetes metadata: #{e}")
       end
+
+    rescue => e
+      @logger.info("Unknown error while getting Kubernetes metadata: #{e}")
+      return nil
     end
     return nil
   end
