@@ -55,7 +55,7 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
       @logger.debug("metadata cache hit")
       metadata = lookup_cache[path]
     else
-      @logger.debug("metadata cache miss")
+      @logger.info("metadata cache miss")
       kubernetes = get_file_info(path)
 
       return unless kubernetes
@@ -105,7 +105,7 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
       @logger.debug("kubernetes metadata => #{metadata}")
 
     rescue => e
-      @logger.warn("Error setting log format: #{e}")
+      @logger.info("Error setting log format: #{e}")
     end
   end
 
@@ -153,12 +153,12 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
           apiResponse = response.body
           lookup_cache[url] = apiResponse
         rescue RestClient::ResourceNotFound
-          @logger.debug("Kubernetes returned an error while querying the API")
+          @logger.info("Kubernetes returned an error while querying the API")
           return nil
         end
 
         if response.code != 200
-          @logger.warn("Non 200 response code returned: #{response.code}")
+          @logger.info("Non 200 response code returned: #{response.code}")
         end
 
         return nil unless response.code == 200
@@ -170,10 +170,10 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
           data['annotations'] = sanatize_keys(parsed['metadata']['annotations'])
           return data
         rescue => e
-          @logger.warn("Unkown error while trying to load json response: #{e}")
+          @logger.info("Unkown error while trying to load json response: #{e}")
         end
       rescue => e
-        @logger.warn("Unknown error while getting Kubernetes metadata: #{e}")
+        @logger.info("Unknown error while getting Kubernetes metadata: #{e}")
       end
     end
     return nil
